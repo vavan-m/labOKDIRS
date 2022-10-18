@@ -10,14 +10,14 @@ db = client['quasiDB']
 series_collection = db['URFU']
 
 base_url = 'https://study.urfu.ru'
-url_author = base_url + '/Rubricator/Author/'
+url_authors = base_url + '/Rubricator/Author/'
 
 def insert_document(collection, data):
     return collection.insert_one(data).inserted_id
 
 def parse():
     for letter in range(ord('А'), ord('Я')):
-        page = requests.get(url_author + chr(letter))
+        page = requests.get(url_authors + chr(letter))
         soup = BeautifulSoup(page.text, "html.parser")
         allAuthors = soup.findAll('a', {'href': re.compile(r'Search/Author/\d+')})
         for data in allAuthors:
@@ -35,9 +35,18 @@ def parse():
                 keyWords = soupАnnotation.find('span', text='Ключевые слова:')
                 if keyWords != None:
                     keyWords = keyWords.next_sibling
+                    keyWords = keyWords.lower()
+                    keyWords = ' '.join(keyWords.split())
+                    keyWords = keyWords.split(", ")
+                    keyWords[-1] = keyWords[-1].replace(".", "")
                 annotation = soupАnnotation.find('h3', text='Аннотация')
                 annotation = annotation.next_sibling
-                filteredResources["annotation"] = annotation
+                annotation = annotation.replace("\r\n", "")
+                annotation = ' '.join(annotation.split())
+                if (annotation == '\n') or (annotation == ''):
+                    filteredResources["annotation"] = None 
+                else: 
+                    filteredResources["annotation"] = annotation
                 filteredResources["keyWords"] = keyWords
                 filteredAuthor["resources"].append(filteredResources)
             insert_document(series_collection, filteredAuthor)
