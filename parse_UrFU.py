@@ -4,6 +4,14 @@ import re
 import os
 from pymongo import MongoClient
 from pick import pick
+# selenium
+import time
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.expected_conditions import (presence_of_element_located)
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 client = MongoClient('localhost', 27017)
 
@@ -109,17 +117,56 @@ def parseFromCache():
             insert_document(series_collection, filteredAuthor)
 
 
+# кибер ленинка поиск 
+def searchInCyberleninka():
+    base_url = "https://cyberleninka.ru/"
+    url_search = base_url + "search?q="
+
+    words = input("Введите описание иследования: ")
+    words = words.split(" ")
+    url_search += '%20'.join(words)
+    print(url_search)
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+    driver.get(url_search)
+    time.sleep(10)
+    soup = BeautifulSoup(driver.page_source, "html.parser")
+    allArticlKeyWords = []
+    allArticle = soup.findAll('a', {'href': re.compile(r'/article/')})
+    for article in allArticle:
+        pageАrticle = requests.get(base_url + article.attrs['href'])
+        soupАrticle = BeautifulSoup(pageАrticle.text, "html.parser")
+        keyWords = soupАrticle.findAll('span', "hl to-search")
+        for word in keyWords:
+            allArticlKeyWords.append(word.contents[0].lower())
+    authors = []
+    for document in series_collection.find({"resources.keyWords": {"$in": allArticlKeyWords }}):
+        count = 0 
+        for resources in document["resources"]:
+            if resources["keyWords"] != None:
+                for keyWord in resources["keyWords"]:
+                    if keyWord in allArticlKeyWords:
+                        count += 1
+        if count > 2:
+            authors.append(document)             
+    for author in authors:
+        print(author["name"])
+        # for resours in author["resources"]:
+        #     print(resours["name"])
+
 if __name__ == "__main__":   
     title = 'Выберете предпочитаемый метод: '
-    options = ['Парсинг сайта УрФУ', 'Парсинг сохраненной ранне копии сайта', 'Получить ключевые слова']
+    options = ['Парсинг сайта УрФУ', 'Парсинг сохраненной раннее копии сайта', 'Поиск в киберленинке', 'Получить ключевые слова']
     option, index = pick(options, title)
-
+    searchInCyberleninka()    
     if index == 0:
         parse()
     elif index == 1:
         parseFromCache()
+    elif index == 2:
+        searchInCyberleninka()    
     else:
         get_all_keywords(series_collection)
         for key, value in sorted(dictionary.items()):
             print("{0}: {1}".format(key,value))
+
 
